@@ -759,7 +759,7 @@ function initPlayer(videoUrl) {
 }
 
 // 自定义M3U8 Loader用于过滤广告
-class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
+/*class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
     constructor(config) {
         super(config);
         const load = this.load.bind(this);
@@ -800,6 +800,59 @@ function filterAdsFromM3U8(m3u8Content, strictMode = false) {
     }
 
     return filteredLines.join('\n');
+}*/
+
+class CustomHlsJsLoader extends Hls.DefaultConfig.loader {
+    constructor(config) {
+        super(config);
+        const originalLoad = this.load.bind(this);
+
+        this.load = (context, config, callbacks) => {
+            if (context.type === 'manifest' || context.type === 'level') {
+                const originalOnSuccess = callbacks.onSuccess;
+
+                callbacks.onSuccess = (response, stats, context) => {
+                    if (typeof response.data === 'string') {
+                        // 修正：处理逻辑应包含对 TS 路径的过滤
+                        response.data = this.filterAds(response.data);
+                    }
+                    originalOnSuccess(response, stats, context);
+                };
+            }
+            originalLoad(context, config, callbacks);
+        };
+    }
+
+    filterAds(m3u8Content) {
+        const lines = m3u8Content.split('\n');
+        const result = [];
+        let isAdSection = false;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+
+            // 示例：基于特定特征识别广告块（需根据你实际的广告 M3U8 特征修改）
+            // 通常广告被包裹在 DISCONTINUITY 之间，或者 URL 包含特定字符
+            if (line.includes("#EXT-X-DISCONTINUITY")) {
+                // 这里可以根据上下文判断是否跳过这一段
+                // 暂时保留标签，除非你确定要删除整个 Block
+                result.push(line);
+                continue;
+            }
+
+            // 过滤特定的广告域名或特征
+            if (line.includes("ad-provider.com") || line.includes("/ads/")) {
+                // 移除该行（TS地址）以及它上一行的 #EXTINF
+                if (result.length > 0 && result[result.length - 1].startsWith("#EXTINF")) {
+                    result.pop();
+                }
+                continue;
+            }
+
+            result.push(line);
+        }
+        return result.join('\n');
+    }
 }
 
 
